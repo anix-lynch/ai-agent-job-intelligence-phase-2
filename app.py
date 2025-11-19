@@ -1,5 +1,6 @@
 """
-AI Agent Job Intelligence Platform
+AI Agent Job Intelligence Platform - Phase 2
+Resume MCP Integration: Personalized job matching with your resume data
 Demonstrates: AI agent orchestration, vector databases, ML classification, semantic search
 """
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from ml.vector_store import VectorStore
 from ml.classifier import ATSClassifier
 from agents.langchain_agent import JobMatchingAgent
+from utils.resume_loader import ResumeLoader
 
 # Auto-load API keys from environment
 def load_api_keys():
@@ -106,6 +108,17 @@ if 'agent' not in st.session_state:
     st.session_state.agent = None
 if 'jobs_df' not in st.session_state:
     st.session_state.jobs_df = None
+if 'resume_loader' not in st.session_state:
+    st.session_state.resume_loader = None
+
+@st.cache_resource
+def load_resume():
+    """Load personalized resume from Resume MCP"""
+    try:
+        return ResumeLoader()
+    except Exception as e:
+        st.error(f"Error loading resume: {str(e)}")
+        return None
 
 @st.cache_data
 def load_jobs_data():
@@ -177,9 +190,29 @@ def display_job_card(job, score=None, ats_score=None):
     </div>
     """, unsafe_allow_html=True)
 
+# Load resume data
+if st.session_state.resume_loader is None:
+    st.session_state.resume_loader = load_resume()
+
+resume_loader = st.session_state.resume_loader
+
 # Header
-st.markdown('<div class="main-header">🤖 AI Agent Job Intelligence</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">AI-Powered Job Matching with Vector Search & ML Classification</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🤖 AI Agent Job Intelligence - Phase 2</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Personalized Job Matching with Resume MCP Integration</div>', unsafe_allow_html=True)
+
+# Display personalized profile if resume loaded
+if resume_loader:
+    with st.expander("👤 Your Profile (Auto-loaded from Resume MCP)", expanded=False):
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.write(f"**{resume_loader.get_profile_summary()}**")
+            st.write(f"**Top Skills:** {resume_loader.get_skills_text()}")
+            st.write(f"**Target Roles:** {', '.join(resume_loader.get_target_roles())}")
+        with col2:
+            st.write(f"**Salary Preference:** {resume_loader.format_salary_preference()}")
+            contact = resume_loader.get_contact_info()
+            if contact:
+                st.write(f"**LinkedIn:** {contact.get('linkedin', 'N/A')}")
 
 # Load data
 try:
@@ -220,11 +253,18 @@ try:
         if st.session_state.vector_store is None:
             st.session_state.vector_store = initialize_vector_store(jobs_df)
         
-        # Search input
+        # Search input - auto-fill with resume if available
+        default_query = resume_loader.get_resume_text() if resume_loader else ""
+        
         query = st.text_area(
             "Enter your resume or skills:",
+            value=default_query,
+            height=150,
             placeholder="e.g., 'Senior ML Engineer with 5 years experience in Python, PyTorch, building recommendation systems...'"
         )
+        
+        if resume_loader and not query:
+            st.info("💡 Your resume has been auto-loaded! Click 'Search Jobs' to find matches.")
         
         num_results = st.slider("Number of results", 5, 20, 10)
         
@@ -263,11 +303,18 @@ try:
         if st.session_state.classifier is None:
             st.session_state.classifier = initialize_classifier(jobs_df)
         
-        # Input
+        # Input - auto-fill with resume if available
+        default_resume = resume_loader.get_resume_text() if resume_loader else ""
+        
         resume_text = st.text_area(
             "Paste your resume:",
+            value=default_resume,
+            height=150,
             placeholder="Your resume content here..."
         )
+        
+        if resume_loader and not resume_text:
+            st.info("💡 Your resume has been auto-loaded! Click 'Predict ATS Score' to analyze.")
         
         if st.button("🧠 Predict ATS Score", type="primary"):
             if resume_text:

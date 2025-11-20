@@ -2,6 +2,8 @@
 
 > **Resume MCP Integration**: AI-powered job matching with **personalized resume data** from your Resume MCP server
 
+![Demo](ATS_phase2.gif)
+
 [![Deploy](https://img.shields.io/badge/deploy-vercel-black)](https://vercel.com)
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)

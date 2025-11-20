@@ -106,9 +106,15 @@ class ResumeLoader:
     def format_salary_preference(self) -> str:
         """Format salary preference as string"""
         salary = self.get_target_salary()
+        if not salary:
+            return "Not specified"
+        
         min_rate = salary.get('min', 0)
         max_rate = salary.get('max', 0)
         currency = salary.get('currency', 'USD')
         unit = salary.get('unit', 'hour')
+        
+        if min_rate == 0 and max_rate == 0:
+            return "Not specified"
         
         return f"${min_rate}-${max_rate} {currency}/{unit}"

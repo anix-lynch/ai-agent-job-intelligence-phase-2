@@ -1,63 +1,32 @@
-"""Vector Store Implementation using ChromaDB and Pinecone
+"""Vector Store Implementation using ChromaDB
 
 Demonstrates:
 - Vector embeddings with sentence-transformers
 - Semantic search with cosine similarity
 - FAISS indexing for approximate nearest neighbor
 - Retrieval Augmented Generation (RAG) pattern
-- Multi-vector database support (ChromaDB, Pinecone)
 """
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict
 import faiss
-import os
-
-# Optional Pinecone import
-try:
-    from pinecone import Pinecone, ServerlessSpec
-    PINECONE_AVAILABLE = True
-except ImportError:
-    PINECONE_AVAILABLE = False
 
 
 class VectorStore:
-    """Multi-modal vector database for semantic job matching
+    """Multi-modal vector database for semantic job matching"""
     
-    Supports multiple vector databases:
-    - ChromaDB (default, open source)
-    - Pinecone (cloud, optional)
-    """
-    
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", use_pinecone: bool = False):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         # Initialize transformer model for neural embeddings
         self.model = SentenceTransformer(model_name)
-        self.use_pinecone = use_pinecone and PINECONE_AVAILABLE
         
-        if self.use_pinecone:
-            # Pinecone for cloud vector storage
-            api_key = os.getenv('PINECONE_API_KEY')
-            if api_key:
-                self.pinecone = Pinecone(api_key=api_key)
-                self.index_name = "job-embeddings"
-                # Create index if it doesn't exist
-                try:
-                    self.pinecone_index = self.pinecone.Index(self.index_name)
-                except:
-                    # Index doesn't exist, will be created on first use
-                    self.pinecone_index = None
-            else:
-                self.use_pinecone = False
-        
-        if not self.use_pinecone:
-            # ChromaDB for persistent vector storage (ephemeral client)
-            self.client = chromadb.EphemeralClient()
-            self.collection = self.client.get_or_create_collection(
-                name="job_embeddings",
-                metadata={"hnsw:space": "cosine"}  # Cosine similarity metric
-            )
+        # ChromaDB for persistent vector storage (ephemeral client)
+        self.client = chromadb.EphemeralClient()
+        self.collection = self.client.get_or_create_collection(
+            name="job_embeddings",
+            metadata={"hnsw:space": "cosine"}  # Cosine similarity metric
+        )
         
         # FAISS for approximate nearest neighbor search
         self.dimension = 384  # MiniLM embedding dimension
@@ -80,24 +49,12 @@ class VectorStore:
         # Generate embeddings
         embeddings = self.model.encode(texts, convert_to_numpy=True)
         
-        if self.use_pinecone and self.pinecone_index:
-            # Add to Pinecone
-            vectors = [
-                {
-                    "id": str(id_val),
-                    "values": emb.tolist(),
-                    "metadata": {**meta, "text": text}
-                }
-                for id_val, emb, meta, text in zip(ids, embeddings, metadatas, texts)
-            ]
-            self.pinecone_index.upsert(vectors=vectors)
-        else:
-            # Add to ChromaDB
-            self.collection.add(
-                embeddings=embeddings.tolist(),
-                documents=texts,
-                ids=ids
-            )
+        # Add to ChromaDB
+        self.collection.add(
+            embeddings=embeddings.tolist(),
+            documents=texts,
+            ids=ids
+        )
         
         # Add to FAISS index for fast approximate nearest neighbor
         faiss.normalize_L2(embeddings)  # Normalize for cosine similarity
@@ -114,26 +71,13 @@ class VectorStore:
         # Embed query
         query_embedding = self.embed_text(query)
         
-        if self.use_pinecone and self.pinecone_index:
-            # Search Pinecone
-            results = self.pinecone_index.query(
-                vector=query_embedding.tolist(),
-                top_k=top_k,
-                include_metadata=True
-            )
-            # Convert to ChromaDB-like format for compatibility
-            return {
-                "documents": [[match.metadata.get("text", "") for match in results.matches]],
-                "ids": [[match.id for match in results.matches]],
-                "distances": [[match.score for match in results.matches]]
-            }
-        else:
-            # Search ChromaDB
-            results = self.collection.query(
-                query_embeddings=[query_embedding.tolist()],
-                n_results=top_k
-            )
-            return results
+        # Search ChromaDB
+        results = self.collection.query(
+            query_embeddings=[query_embedding.tolist()],
+            n_results=top_k
+        )
+        
+        return results
     
     def fast_ann_search(self, query: str, top_k: int = 10) -> np.ndarray:
         """Fast approximate nearest neighbor using FAISS indexing"""

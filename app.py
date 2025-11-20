@@ -293,6 +293,10 @@ try:
                             with st.expander(f"#{i+1} - {job['title']} @ {job['company']} ({score:.1%} match)"):
                                 display_job_card(job, score=score)
                                 
+                                # Add apply button
+                                if pd.notna(job.get('apply_url')):
+                                    st.link_button("🚀 Apply Now", job['apply_url'], use_container_width=True)
+                                
                                 if pd.notna(job.get('description')):
                                     st.write("**Description:**")
                                     st.write(job['description'][:500] + "..." if len(str(job['description'])) > 500 else job['description'])
@@ -417,6 +421,11 @@ try:
         for idx, job in filtered_df.head(20).iterrows():
             with st.expander(f"{job['title']} @ {job['company']}"):
                 display_job_card(job)
+                
+                # Add apply button
+                if pd.notna(job.get('apply_url')):
+                    st.link_button("🚀 Apply Now", job['apply_url'], use_container_width=True)
+                
                 if pd.notna(job.get('description')):
                     st.write("**Description:**")
                     st.write(str(job['description'])[:500] + "..." if len(str(job.get('description', ''))) > 500 else job.get('description', ''))

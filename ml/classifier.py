@@ -239,7 +239,7 @@ class ATSClassifier:
     
     def get_feature_importance(self):
         """Get top keywords"""
-        if not self.feature_names.any():
+        if not self.feature_names or len(self.feature_names) == 0:
             return {}
         
         # Simple frequency-based importance

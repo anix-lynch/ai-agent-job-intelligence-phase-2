@@ -34,34 +34,80 @@ class JobMatchingAgent:
         # Simple matching logic with reasoning
         query_lower = query.lower()
         
-        # Observe query patterns
-        if "senior" in query_lower or "200k" in query_lower or "$200" in query_lower:
-            self.reasoning_trace.append("👁️ Observation: User wants high-salary senior roles (200K+)")
-            filtered = jobs_df[jobs_df['salary_min'] >= 200000].head(5)
-            role_type = "senior high-salary"
-        elif "ml" in query_lower or "machine learning" in query_lower:
+        # Start with all jobs
+        filtered = jobs_df.copy()
+        filters_applied = []
+        
+        # Location filtering (most important)
+        location_keywords = {
+            'los angeles': ['Los Angeles', 'LA,'],
+            'la': ['Los Angeles', 'LA,'],
+            'sf': ['San Francisco', 'SF,'],
+            'san francisco': ['San Francisco'],
+            'nyc': ['New York', 'NY,'],
+            'new york': ['New York'],
+            'seattle': ['Seattle'],
+            'boston': ['Boston'],
+            'austin': ['Austin'],
+            'chicago': ['Chicago'],
+            'mountain view': ['Mountain View'],
+            'palo alto': ['Palo Alto'],
+            'sunnyvale': ['Sunnyvale'],
+            'san jose': ['San Jose']
+        }
+        
+        location_found = None
+        for location_key, location_patterns in location_keywords.items():
+            if location_key in query_lower:
+                location_found = location_key.upper()
+                # Filter by location - must match one of the patterns
+                location_mask = filtered['location'].str.contains('|'.join(location_patterns), case=False, na=False)
+                filtered = filtered[location_mask]
+                filters_applied.append(f"location: {location_found}")
+                self.reasoning_trace.append(f"👁️ Observation: User wants jobs in {location_found}")
+                break
+        
+        # Salary filtering
+        if "200k" in query_lower or "$200" in query_lower or "200000" in query_lower:
+            self.reasoning_trace.append("👁️ Observation: User wants high-salary roles (200K+)")
+            filtered = filtered[filtered['salary_min'] >= 200000]
+            filters_applied.append("salary: 200K+")
+        
+        # Role type filtering
+        role_type = "general"
+        if "senior" in query_lower:
+            self.reasoning_trace.append("👁️ Observation: User wants senior-level positions")
+            filtered = filtered[filtered['title'].str.contains('Senior|Staff|Principal|Lead', case=False, na=False)]
+            filters_applied.append("level: senior")
+            role_type = "senior"
+        
+        if "ml" in query_lower or "machine learning" in query_lower:
             self.reasoning_trace.append("👁️ Observation: User interested in ML engineering roles")
-            filtered = jobs_df[jobs_df['title'].str.contains('ML|Machine Learning', case=False, na=False)].head(5)
+            filtered = filtered[filtered['title'].str.contains('ML|Machine Learning', case=False, na=False)]
+            filters_applied.append("role: ML")
             role_type = "ML engineering"
         elif "ai" in query_lower or "artificial intelligence" in query_lower:
             self.reasoning_trace.append("👁️ Observation: User interested in AI roles")
-            filtered = jobs_df[jobs_df['title'].str.contains('AI|Artificial Intelligence', case=False, na=False)].head(5)
+            filtered = filtered[filtered['title'].str.contains('AI|Artificial Intelligence', case=False, na=False)]
+            filters_applied.append("role: AI")
             role_type = "AI"
-        else:
-            self.reasoning_trace.append("👁️ Observation: General job search")
-            filtered = jobs_df.head(5)
-            role_type = "general"
+        
+        # Get top 5 results
+        filtered = filtered.head(5)
         
         # Decision making
-        self.reasoning_trace.append(f"🤔 Thought: Found {len(filtered)} {role_type} positions")
+        filter_summary = ", ".join(filters_applied) if filters_applied else "no filters"
+        self.reasoning_trace.append(f"🤔 Thought: Found {len(filtered)} {role_type} positions ({filter_summary})")
         self.reasoning_trace.append("✅ Decision: Returning top matches with details")
         
         # Format response
-        response = f"🎯 Found {len(filtered)} {role_type} roles:\n\n"
+        if len(filtered) == 0:
+            return f"❌ No jobs found matching your criteria. Try broadening your search."
+        
+        response = f"🎯 Found {len(filtered)} AI roles:\n\n"
         for idx, job in filtered.iterrows():
-            salary_range = f"${int(job['salary_min']/1000)}K-${int(job['salary_max']/1000)}K"
-            response += f"• **{job['title']}** at **{job['company']}**\n"
-            response += f"  💰 {salary_range} | 📍 {job.get('location', 'Remote')}\n\n"
+            salary_range = f"${int(job['salary_min']/1000)}K-${int(job['salary_max']/1000)}K" if pd.notna(job.get('salary_min')) else "Competitive"
+            response += f"• **{job['title']}** at **{job['company']}** 💰 {salary_range} | 📍 {job.get('location', 'Remote')}\n\n"
         
         self.reasoning_trace.append(f"📊 Final Answer: Presented {len(filtered)} curated opportunities")
         

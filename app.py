@@ -180,9 +180,6 @@ def format_salary(row):
 
 def display_job_card(job, score=None, ats_score=None):
     """Display job as card"""
-    apply_url = job.get('apply_url', '')
-    apply_button = f'<a href="{apply_url}" target="_blank" style="display: inline-block; background: #1f77b4; color: white; padding: 0.5rem 1.5rem; border-radius: 5px; text-decoration: none; font-weight: bold; margin-top: 0.5rem;">Apply Now →</a>' if apply_url else ''
-    
     st.markdown(f"""
     <div class="job-card">
         <h3>{job['title']}</h3>
@@ -190,7 +187,6 @@ def display_job_card(job, score=None, ats_score=None):
         <p><span class="salary-badge">{format_salary(job)}</span></p>
         {f'<p><span class="score-badge">Match: {score:.1%}</span></p>' if score else ''}
         {f'<p><span class="score-badge">ATS: {ats_score:.1%}</span></p>' if ats_score else ''}
-        {apply_button}
     </div>
     """, unsafe_allow_html=True)
 

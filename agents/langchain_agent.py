@@ -107,7 +107,9 @@ class JobMatchingAgent:
         response = f"🎯 Found {len(filtered)} AI roles:\n\n"
         for idx, job in filtered.iterrows():
             salary_range = f"${int(job['salary_min']/1000)}K-${int(job['salary_max']/1000)}K" if pd.notna(job.get('salary_min')) else "Competitive"
-            response += f"• **{job['title']}** at **{job['company']}** 💰 {salary_range} | 📍 {job.get('location', 'Remote')}\n\n"
+            apply_url = job.get('apply_url', '')
+            apply_link = f" [Apply Now →]({apply_url})" if apply_url else ""
+            response += f"• **{job['title']}** at **{job['company']}** 💰 {salary_range} | 📍 {job.get('location', 'Remote')}{apply_link}\n\n"
         
         self.reasoning_trace.append(f"📊 Final Answer: Presented {len(filtered)} curated opportunities")
         

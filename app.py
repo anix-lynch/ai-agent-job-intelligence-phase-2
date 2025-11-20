@@ -337,7 +337,9 @@ try:
                     importance = st.session_state.classifier.get_feature_importance()
                     if importance:
                         st.write("**Top Keywords Importance:**")
-                        st.bar_chart(importance[:10])
+                        # Convert dict to pandas Series for bar chart
+                        importance_series = pd.Series(importance)
+                        st.bar_chart(importance_series)
             else:
                 st.warning("Please paste your resume for ATS analysis")
     

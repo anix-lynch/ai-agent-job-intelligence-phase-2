@@ -257,43 +257,62 @@ class ATSClassifier:
     
     def _calculate_realistic_score(self, text: str) -> float:
         """Calculate realistic ATS score based on resume quality factors"""
-        score = 0.5  # Base score
+        score = 0.35  # Lower base score
+        
+        text_lower = text.lower()
+        
+        # CRITICAL: Check for AI/Tech relevance first
+        ai_tech_keywords = [
+            'python', 'java', 'javascript', 'c++', 'machine learning', 'ml', 
+            'ai', 'artificial intelligence', 'data science', 'engineer', 
+            'software', 'developer', 'programming', 'code', 'algorithm',
+            'aws', 'gcp', 'azure', 'cloud', 'docker', 'kubernetes', 'api'
+        ]
+        ai_tech_count = sum(1 for kw in ai_tech_keywords if kw in text_lower)
+        
+        # If no AI/tech keywords, cap score at 65%
+        if ai_tech_count == 0:
+            return min(np.random.uniform(0.45, 0.65), 0.65)
+        
+        # If only 1-2 AI/tech keywords, cap at 75%
+        if ai_tech_count <= 2:
+            score += 0.15
+            max_score = 0.75
+        else:
+            # Good AI/tech keyword density
+            score += min(ai_tech_count * 0.03, 0.30)
+            max_score = 0.92
         
         # Length check (too short or too long is bad)
         word_count = len(text.split())
         if 200 <= word_count <= 800:
-            score += 0.15
+            score += 0.10
         elif 100 <= word_count < 200 or 800 < word_count <= 1200:
-            score += 0.08
+            score += 0.05
         
-        # Keyword density (important terms)
-        important_keywords = [
-            'python', 'machine learning', 'ml', 'ai', 'data', 'engineer',
-            'aws', 'gcp', 'cloud', 'docker', 'kubernetes', 'sql', 'api',
-            'agile', 'leadership', 'team', 'project', 'experience'
-        ]
-        text_lower = text.lower()
-        keyword_count = sum(1 for kw in important_keywords if kw in text_lower)
-        score += min(keyword_count * 0.02, 0.25)  # Max 0.25 from keywords
+        # Soft skills keywords (less important)
+        soft_keywords = ['leadership', 'team', 'project', 'agile', 'communication']
+        soft_count = sum(1 for kw in soft_keywords if kw in text_lower)
+        score += min(soft_count * 0.01, 0.05)
         
         # Quantifiable achievements (numbers)
         import re
         numbers = re.findall(r'\d+', text)
         if len(numbers) >= 5:
-            score += 0.10
+            score += 0.08
         elif len(numbers) >= 3:
-            score += 0.05
+            score += 0.04
         
         # Formatting indicators (bullet points, sections)
         if '•' in text or '-' in text or '*' in text:
-            score += 0.05
+            score += 0.03
         
-        # Add small random variance (-3% to +3%)
-        variance = np.random.uniform(-0.03, 0.03)
+        # Add small random variance (-5% to +2%)
+        variance = np.random.uniform(-0.05, 0.02)
         score += variance
         
-        # Ensure score is between 0.4 and 0.95
-        return max(0.4, min(score, 0.95))
+        # Ensure score is between 0.35 and max_score
+        return max(0.35, min(score, max_score))
     
     def get_feature_importance(self):
         """Get top keywords with realistic importance scores"""

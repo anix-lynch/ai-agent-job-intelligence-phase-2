@@ -9,7 +9,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.resume_loader import ResumeLoader
+from pipelines.ingestion import ResumeLoader
 
 def test_resume_loading():
     """Test resume loading functionality"""
@@ -19,7 +19,7 @@ def test_resume_loading():
     
     try:
         # Load resume
-        print("\n1. Loading resume from data/resume.json...")
+        print("\n1. Loading resume from data/bronze/resume.json...")
         resume = ResumeLoader()
         print("✅ Resume loaded successfully!")
         

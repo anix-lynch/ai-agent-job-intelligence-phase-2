@@ -1,0 +1,1 @@
+# Pipelines: ingestion → transformation → serving

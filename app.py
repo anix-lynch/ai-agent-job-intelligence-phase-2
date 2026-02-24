@@ -14,10 +14,10 @@ import os
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ml.vector_store import VectorStore
-from ml.classifier import ATSClassifier
-from agents.langchain_agent import JobMatchingAgent
-from utils.resume_loader import ResumeLoader
+from features.vector_store import VectorStore
+from features.feature_store import ATSClassifier
+from agents.orchestrator import JobMatchingAgent
+from pipelines.ingestion import ResumeLoader
 
 # Auto-load API keys from environment
 def load_api_keys():
@@ -26,7 +26,7 @@ def load_api_keys():
     
     # Try to load from get_secret utility
     try:
-        from utils.get_secret import get_secret
+        from shared.get_secret import get_secret
         keys['openai'] = get_secret('OPENAI_API_KEY')
         keys['deepseek'] = get_secret('DEEPSEEK_API_KEY')
         keys['anthropic'] = get_secret('ANTHROPIC_API_KEY')
@@ -122,8 +122,8 @@ def load_resume():
 
 @st.cache_data
 def load_jobs_data():
-    """Load Foorilla jobs dataset"""
-    data_path = Path(__file__).parent / "data" / "foorilla_all_jobs.csv"
+    """Load Foorilla jobs dataset (bronze layer)"""
+    data_path = Path(__file__).parent / "data" / "bronze" / "foorilla_all_jobs.csv"
     df = pd.read_csv(data_path)
     return df
 

@@ -14,31 +14,32 @@ import os
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from features.vector_store import VectorStore
-from features.feature_store import ATSClassifier
+# Lazy imports for heavy deps (ChromaDB, sentence-transformers) so app loads on Streamlit Cloud
+def _get_vector_store():
+    from features.vector_store import VectorStore
+    return VectorStore
+
+def _get_ats_classifier():
+    from features.feature_store import ATSClassifier
+    return ATSClassifier
+
 from agents.orchestrator import JobMatchingAgent
 from pipelines.ingestion import ResumeLoader
 
-# Auto-load API keys from environment
+# Auto-load API keys (never raise - use default so get_secret is safe)
 def load_api_keys():
-    """Load API keys from global secrets or environment"""
     keys = {}
-    
-    # Try to load from get_secret utility
     try:
         from shared.get_secret import get_secret
-        keys['openai'] = get_secret('OPENAI_API_KEY')
-        keys['deepseek'] = get_secret('DEEPSEEK_API_KEY')
-        keys['anthropic'] = get_secret('ANTHROPIC_API_KEY')
-    except:
-        # Fallback to environment variables
-        keys['openai'] = os.getenv('OPENAI_API_KEY')
-        keys['deepseek'] = os.getenv('DEEPSEEK_API_KEY')
-        keys['anthropic'] = os.getenv('ANTHROPIC_API_KEY')
-    
+        keys['openai'] = get_secret('OPENAI_API_KEY', default="") or os.getenv('OPENAI_API_KEY')
+        keys['deepseek'] = get_secret('DEEPSEEK_API_KEY', default="") or os.getenv('DEEPSEEK_API_KEY')
+        keys['anthropic'] = get_secret('ANTHROPIC_API_KEY', default="") or os.getenv('ANTHROPIC_API_KEY')
+    except Exception:
+        keys['openai'] = os.getenv('OPENAI_API_KEY', "")
+        keys['deepseek'] = os.getenv('DEEPSEEK_API_KEY', "")
+        keys['anthropic'] = os.getenv('ANTHROPIC_API_KEY', "")
     return {k: v for k, v in keys.items() if v}
 
-# Load keys at startup
 AUTO_LOADED_KEYS = load_api_keys()
 
 # Page config
@@ -129,7 +130,11 @@ def load_jobs_data():
 
 @st.cache_resource
 def initialize_vector_store(_jobs_df):
-    """Initialize vector store with job embeddings"""
+    """Initialize vector store (lazy import for Streamlit Cloud)."""
+    try:
+        VectorStore = _get_vector_store()
+    except Exception as e:
+        raise RuntimeError(f"Vector store unavailable: {e}") from e
     with st.spinner("🚀 Initializing vector database with 1000 AI/ML jobs..."):
         vs = VectorStore(model_name="all-MiniLM-L6-v2")
         
@@ -154,7 +159,11 @@ def initialize_vector_store(_jobs_df):
 
 @st.cache_resource
 def initialize_classifier(_jobs_df):
-    """Initialize ATS classifier"""
+    """Initialize ATS classifier (lazy import)."""
+    try:
+        ATSClassifier = _get_ats_classifier()
+    except Exception as e:
+        raise RuntimeError(f"ATS classifier unavailable: {e}") from e
     with st.spinner("🧠 Training ML classifier for ATS prediction..."):
         classifier = ATSClassifier()
         
@@ -214,11 +223,18 @@ if resume_loader:
             if contact:
                 st.write(f"**LinkedIn:** {contact.get('linkedin', 'N/A')}")
 
-# Load data
+# Load data (friendly error if files missing on Streamlit Cloud)
 try:
     if st.session_state.jobs_df is None:
         st.session_state.jobs_df = load_jobs_data()
-    
+except FileNotFoundError as e:
+    st.error(f"Data file not found: {e}. Ensure `data/bronze/foorilla_all_jobs.csv` is in the repo.")
+    st.stop()
+except Exception as e:
+    st.error(f"Error loading jobs data: {e}")
+    st.stop()
+
+try:
     jobs_df = st.session_state.jobs_df
     
     # Display dataset stats
@@ -249,9 +265,16 @@ try:
         st.header("🔍 Vector Search - Semantic Job Matching")
         st.write("Uses sentence-transformers & ChromaDB for semantic similarity")
         
-        # Initialize vector store
+        # Initialize vector store (may fail on Streamlit Cloud due to memory)
         if st.session_state.vector_store is None:
-            st.session_state.vector_store = initialize_vector_store(jobs_df)
+            try:
+                st.session_state.vector_store = initialize_vector_store(jobs_df)
+            except Exception as e:
+                st.error(f"Vector search unavailable: {e}. Try **Browse All Jobs** or **ATS Classifier**.")
+                st.session_state.vector_store = False
+        if st.session_state.vector_store is False:
+            st.error("Vector search is unavailable (e.g. memory limit). Use **Browse All Jobs** or **ATS Classifier**.")
+            st.stop()
         
         # Search input - auto-fill with resume if available
         default_query = resume_loader.get_resume_text() if resume_loader else ""
@@ -305,7 +328,13 @@ try:
         
         # Initialize classifier
         if st.session_state.classifier is None:
-            st.session_state.classifier = initialize_classifier(jobs_df)
+            try:
+                st.session_state.classifier = initialize_classifier(jobs_df)
+            except Exception as e:
+                st.error(f"ATS classifier unavailable: {e}")
+                st.session_state.classifier = False
+        if st.session_state.classifier is False:
+            st.stop()
         
         # Input - auto-fill with resume if available
         default_resume = resume_loader.get_resume_text() if resume_loader else ""
@@ -428,7 +457,9 @@ try:
 
 except Exception as e:
     st.error(f"Error loading data: {str(e)}")
-    st.write("Please ensure foorilla_all_jobs.csv is in the data/ directory")
+    st.write("Ensure `data/bronze/foorilla_all_jobs.csv` and `data/bronze/resume.json` exist in the repo.")
+    with st.expander("Details (for debugging)"):
+        st.exception(e)
 
 # Footer
 st.markdown("---")

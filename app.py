@@ -481,3 +481,9 @@ st.markdown("""
     <p><strong>ATS Keywords:</strong> AI Agent Orchestration • Vector Databases • ML Classification • Semantic Search • Multi-Agent Systems</p>
 </div>
 """, unsafe_allow_html=True)
+
+st.link_button(
+    "🎬 Demo: gozeroshot.dev",
+    "https://gozeroshot.dev",
+    use_container_width=True
+)

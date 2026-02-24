@@ -14,7 +14,7 @@ import os
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Lazy imports for heavy deps (ChromaDB, sentence-transformers) so app loads on Streamlit Cloud
+# Lazy imports so Streamlit Cloud shows real error if something fails
 def _get_vector_store():
     from features.vector_store import VectorStore
     return VectorStore
@@ -23,26 +23,30 @@ def _get_ats_classifier():
     from features.feature_store import ATSClassifier
     return ATSClassifier
 
-from agents.orchestrator import JobMatchingAgent
-from pipelines.ingestion import ResumeLoader
+def _get_job_agent():
+    from agents.orchestrator import JobMatchingAgent
+    return JobMatchingAgent
 
-# Auto-load API keys (never raise - use default so get_secret is safe)
+def _get_resume_loader():
+    from pipelines.ingestion import ResumeLoader
+    return ResumeLoader
+
+# Auto-load API keys (never raise)
 def load_api_keys():
     keys = {}
     try:
         from shared.get_secret import get_secret
-        keys['openai'] = get_secret('OPENAI_API_KEY', default="") or os.getenv('OPENAI_API_KEY')
-        keys['deepseek'] = get_secret('DEEPSEEK_API_KEY', default="") or os.getenv('DEEPSEEK_API_KEY')
-        keys['anthropic'] = get_secret('ANTHROPIC_API_KEY', default="") or os.getenv('ANTHROPIC_API_KEY')
+        for k, env in [("openai", "OPENAI_API_KEY"), ("deepseek", "DEEPSEEK_API_KEY"), ("anthropic", "ANTHROPIC_API_KEY")]:
+            keys[k] = get_secret(env, default="") or os.getenv(env, "")
     except Exception:
-        keys['openai'] = os.getenv('OPENAI_API_KEY', "")
-        keys['deepseek'] = os.getenv('DEEPSEEK_API_KEY', "")
-        keys['anthropic'] = os.getenv('ANTHROPIC_API_KEY', "")
+        keys["openai"] = os.getenv("OPENAI_API_KEY", "")
+        keys["deepseek"] = os.getenv("DEEPSEEK_API_KEY", "")
+        keys["anthropic"] = os.getenv("ANTHROPIC_API_KEY", "")
     return {k: v for k, v in keys.items() if v}
 
 AUTO_LOADED_KEYS = load_api_keys()
 
-# Page config
+# Page config (must be first Streamlit command)
 st.set_page_config(
     page_title="AI Agent Job Intelligence",
     page_icon="🤖",
@@ -50,415 +54,423 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #666;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-    }
-    .job-card {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        background: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .salary-badge {
-        background: #28a745;
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-weight: bold;
-        display: inline-block;
-    }
-    .score-badge {
-        background: #007bff;
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-weight: bold;
-        display: inline-block;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Initialize session state
-if 'vector_store' not in st.session_state:
-    st.session_state.vector_store = None
-if 'classifier' not in st.session_state:
-    st.session_state.classifier = None
-if 'agent' not in st.session_state:
-    st.session_state.agent = None
-if 'jobs_df' not in st.session_state:
-    st.session_state.jobs_df = None
-if 'resume_loader' not in st.session_state:
-    st.session_state.resume_loader = None
-
-@st.cache_resource
-def load_resume():
-    """Load personalized resume from Resume MCP"""
-    try:
-        return ResumeLoader()
-    except Exception as e:
-        st.error(f"Error loading resume: {str(e)}")
-        return None
-
-@st.cache_data
-def load_jobs_data():
-    """Load Foorilla jobs dataset (bronze layer)"""
-    data_path = Path(__file__).parent / "data" / "bronze" / "foorilla_all_jobs.csv"
-    df = pd.read_csv(data_path)
-    return df
-
-@st.cache_resource
-def initialize_vector_store(_jobs_df):
-    """Initialize vector store (lazy import for Streamlit Cloud)."""
-    try:
-        VectorStore = _get_vector_store()
-    except Exception as e:
-        raise RuntimeError(f"Vector store unavailable: {e}") from e
-    with st.spinner("🚀 Initializing vector database with 1000 AI/ML jobs..."):
-        vs = VectorStore(model_name="all-MiniLM-L6-v2")
-        
-        # Create job descriptions for embedding
-        job_texts = []
-        for _, row in _jobs_df.iterrows():
-            text = f"{row['title']} at {row['company']}. "
-            if pd.notna(row.get('description')):
-                text += str(row['description'])
-            if pd.notna(row.get('requirements')):
-                text += " " + str(row['requirements'])
-            job_texts.append(text)
-        
-        # Add to vector store
-        vs.add_documents(
-            documents=job_texts,
-            metadatas=_jobs_df.to_dict('records'),
-            ids=[str(i) for i in range(len(_jobs_df))]
-        )
-        
-        return vs
-
-@st.cache_resource
-def initialize_classifier(_jobs_df):
-    """Initialize ATS classifier (lazy import)."""
-    try:
-        ATSClassifier = _get_ats_classifier()
-    except Exception as e:
-        raise RuntimeError(f"ATS classifier unavailable: {e}") from e
-    with st.spinner("🧠 Training ML classifier for ATS prediction..."):
-        classifier = ATSClassifier()
-        
-        # Prepare training data
-        X = _jobs_df[['title', 'company']].apply(
-            lambda x: f"{x['title']} {x['company']}", axis=1
-        ).tolist()
-        
-        # Create synthetic labels (80% would pass ATS for high-quality dataset)
-        np.random.seed(42)
-        y = (np.random.rand(len(X)) > 0.2).astype(int)
-        
-        classifier.train(X, y)
-        return classifier
-
-def format_salary(row):
-    """Format salary range"""
-    if pd.notna(row.get('salary_min')) and pd.notna(row.get('salary_max')):
-        return f"${int(row['salary_min']/1000)}K - ${int(row['salary_max']/1000)}K"
-    elif pd.notna(row.get('salary_min')):
-        return f"${int(row['salary_min']/1000)}K+"
-    return "Competitive"
-
-def display_job_card(job, score=None, ats_score=None):
-    """Display job as card"""
-    st.markdown(f"""
-    <div class="job-card">
-        <h3>{job['title']}</h3>
-        <p style="color: #666; font-size: 1.1rem;"><strong>{job['company']}</strong> • {job.get('location', 'Remote')}</p>
-        <p><span class="salary-badge">{format_salary(job)}</span></p>
-        {f'<p><span class="score-badge">Match: {score:.1%}</span></p>' if score else ''}
-        {f'<p><span class="score-badge">ATS: {ats_score:.1%}</span></p>' if ats_score else ''}
-    </div>
+try:
+    # Custom CSS
+    st.markdown("""
+    <style>
+        .main-header {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #1f77b4;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        .sub-header {
+            font-size: 1.2rem;
+            color: #666;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1.5rem;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+        .job-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .salary-badge {
+            background: #28a745;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .score-badge {
+            background: #007bff;
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-weight: bold;
+            display: inline-block;
+        }
+    </style>
     """, unsafe_allow_html=True)
-
-# Load resume data
-if st.session_state.resume_loader is None:
-    st.session_state.resume_loader = load_resume()
-
-resume_loader = st.session_state.resume_loader
-
-# Header
-st.markdown('<div class="main-header">🤖 AI Agent Job Intelligence - Phase 2</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Personalized Job Matching with Resume MCP Integration</div>', unsafe_allow_html=True)
-
-# Display personalized profile if resume loaded
-if resume_loader:
-    with st.expander("👤 Your Profile (Auto-loaded from Resume MCP)", expanded=False):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.write(f"**{resume_loader.get_profile_summary()}**")
-            st.write(f"**Top Skills:** {resume_loader.get_skills_text()}")
-            st.write(f"**Target Roles:** {', '.join(resume_loader.get_target_roles())}")
-        with col2:
-            st.write(f"**Salary Preference:** {resume_loader.format_salary_preference()}")
-            contact = resume_loader.get_contact_info()
-            if contact:
-                st.write(f"**LinkedIn:** {contact.get('linkedin', 'N/A')}")
-
-# Load data (friendly error if files missing on Streamlit Cloud)
-try:
-    if st.session_state.jobs_df is None:
-        st.session_state.jobs_df = load_jobs_data()
-except FileNotFoundError as e:
-    st.error(f"Data file not found: {e}. Ensure `data/bronze/foorilla_all_jobs.csv` is in the repo.")
-    st.stop()
-except Exception as e:
-    st.error(f"Error loading jobs data: {e}")
-    st.stop()
-
-try:
-    jobs_df = st.session_state.jobs_df
     
-    # Display dataset stats
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Jobs", f"{len(jobs_df):,}")
-    with col2:
-        avg_salary = jobs_df[['salary_min', 'salary_max']].mean().mean()
-        st.metric("Avg Salary", f"${int(avg_salary/1000)}K")
-    with col3:
-        st.metric("Top Companies", jobs_df['company'].nunique())
-    with col4:
-        salary_range = f"${int(jobs_df['salary_min'].min()/1000)}K-${int(jobs_df['salary_max'].max()/1000)}K"
-        st.metric("Salary Range", salary_range)
+    # Initialize session state
+    if 'vector_store' not in st.session_state:
+        st.session_state.vector_store = None
+    if 'classifier' not in st.session_state:
+        st.session_state.classifier = None
+    if 'agent' not in st.session_state:
+        st.session_state.agent = None
+    if 'jobs_df' not in st.session_state:
+        st.session_state.jobs_df = None
+    if 'resume_loader' not in st.session_state:
+        st.session_state.resume_loader = None
     
-    st.markdown("---")
+    @st.cache_resource
+    def load_resume():
+        """Load personalized resume from Resume MCP"""
+        try:
+            ResumeLoader = _get_resume_loader()
+            return ResumeLoader()
+        except Exception as e:
+            st.error(f"Error loading resume: {str(e)}")
+            return None
     
-    # Sidebar
-    st.sidebar.header("🎯 Search Configuration")
+    @st.cache_data
+    def load_jobs_data():
+        """Load Foorilla jobs dataset (bronze layer)"""
+        data_path = Path(__file__).parent / "data" / "bronze" / "foorilla_all_jobs.csv"
+        df = pd.read_csv(data_path)
+        return df
     
-    search_mode = st.sidebar.radio(
-        "Search Mode",
-        ["Vector Search (Semantic)", "ATS Classifier", "AI Agent Orchestration", "Browse All Jobs"]
-    )
-    
-    # Main content based on mode
-    if search_mode == "Vector Search (Semantic)":
-        st.header("🔍 Vector Search - Semantic Job Matching")
-        st.write("Uses sentence-transformers & ChromaDB for semantic similarity")
-        
-        # Initialize vector store (may fail on Streamlit Cloud due to memory)
-        if st.session_state.vector_store is None:
-            try:
-                st.session_state.vector_store = initialize_vector_store(jobs_df)
-            except Exception as e:
-                st.error(f"Vector search unavailable: {e}. Try **Browse All Jobs** or **ATS Classifier**.")
-                st.session_state.vector_store = False
-        if st.session_state.vector_store is False:
-            st.error("Vector search is unavailable (e.g. memory limit). Use **Browse All Jobs** or **ATS Classifier**.")
-            st.stop()
-        
-        # Search input - auto-fill with resume if available
-        default_query = resume_loader.get_resume_text() if resume_loader else ""
-        
-        query = st.text_area(
-            "Enter your resume or skills:",
-            value=default_query,
-            height=150,
-            placeholder="e.g., 'Senior ML Engineer with 5 years experience in Python, PyTorch, building recommendation systems...'"
-        )
-        
-        if resume_loader and not query:
-            st.info("💡 Your resume has been auto-loaded! Click 'Search Jobs' to find matches.")
-        
-        num_results = st.slider("Number of results", 5, 20, 10)
-        
-        if st.button("🚀 Search Jobs", type="primary"):
-            if query:
-                with st.spinner("Searching with vector embeddings..."):
-                    results = st.session_state.vector_store.semantic_search(query, top_k=num_results)
-                    
-                    # ChromaDB returns: {'ids': [[...]], 'distances': [[...]], 'documents': [[...]], 'metadatas': [[...]]}
-                    num_found = len(results['ids'][0]) if results['ids'] else 0
-                    st.success(f"Found {num_found} matching jobs!")
-                    
-                    if num_found > 0:
-                        for i in range(num_found):
-                            job_id = int(results['ids'][0][i])
-                            distance = results['distances'][0][i]
-                            score = 1 - distance  # Convert distance to similarity score
-                            
-                            # Get job from DataFrame using id
-                            job = jobs_df.iloc[job_id].to_dict()
-                            
-                            with st.expander(f"#{i+1} - {job['title']} @ {job['company']} ({score:.1%} match)"):
-                                display_job_card(job, score=score)
-                                
-                                # Add apply button
-                                if pd.notna(job.get('apply_url')):
-                                    st.link_button("🚀 Apply Now", job['apply_url'], use_container_width=True)
-                                
-                                if pd.notna(job.get('description')):
-                                    st.write("**Description:**")
-                                    st.write(job['description'][:500] + "..." if len(str(job['description'])) > 500 else job['description'])
-            else:
-                st.warning("Please enter your resume or skills to search")
-    
-    elif search_mode == "ATS Classifier":
-        st.header("🎯 ATS Classifier - Machine Learning Prediction")
-        st.write("Uses scikit-learn for ATS compatibility prediction")
-        
-        # Initialize classifier
-        if st.session_state.classifier is None:
-            try:
-                st.session_state.classifier = initialize_classifier(jobs_df)
-            except Exception as e:
-                st.error(f"ATS classifier unavailable: {e}")
-                st.session_state.classifier = False
-        if st.session_state.classifier is False:
-            st.stop()
-        
-        # Input - auto-fill with resume if available
-        default_resume = resume_loader.get_resume_text() if resume_loader else ""
-        
-        resume_text = st.text_area(
-            "Paste your resume:",
-            value=default_resume,
-            height=150,
-            placeholder="Your resume content here..."
-        )
-        
-        if resume_loader and not resume_text:
-            st.info("💡 Your resume has been auto-loaded! Click 'Predict ATS Score' to analyze.")
-        
-        if st.button("🧠 Predict ATS Score", type="primary"):
-            if resume_text:
-                with st.spinner("Running ML classification..."):
-                    score = st.session_state.classifier.predict_score([resume_text])[0]
-                    
-                    # Show prediction
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("ATS Compatibility Score", f"{score:.1%}")
-                    with col2:
-                        verdict = "✅ PASS" if score > 0.5 else "❌ NEEDS IMPROVEMENT"
-                        st.metric("Verdict", verdict)
-                    
-                    # Show feature importance
-                    importance = st.session_state.classifier.get_feature_importance()
-                    if importance:
-                        st.write("**Top Keywords Importance:**")
-                        # Convert dict to pandas Series for bar chart
-                        importance_series = pd.Series(importance)
-                        st.bar_chart(importance_series)
-            else:
-                st.warning("Please paste your resume for ATS analysis")
-    
-    elif search_mode == "AI Agent Orchestration":
-        st.header("🤖 AI Agent - Multi-Agent Reasoning System")
-        st.write("Uses LangChain with ReAct framework for autonomous job matching")
-        
-        st.info("💡 Choose provider - DeepSeek is 70x cheaper than GPT-4!")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            provider = st.selectbox(
-                "LLM Provider:",
-                ["deepseek", "openai", "together"],
-                help="DeepSeek: $0.14/$0.28 per 1M tokens | OpenAI: $10/$30 per 1M tokens"
-            )
-        with col2:
-            api_key = st.text_input(
-                f"{provider.title()} API Key:",
-                type="password",
-                help="Get DeepSeek key at: https://platform.deepseek.com"
-            )
-        
-        if api_key:
-            # Initialize agent
-            if st.session_state.agent is None:
-                with st.spinner("Initializing AI agent..."):
-                    st.session_state.agent = JobMatchingAgent(api_key=api_key)
+    @st.cache_resource
+    def initialize_vector_store(_jobs_df):
+        """Initialize vector store (lazy import for Streamlit Cloud)."""
+        try:
+            VectorStore = _get_vector_store()
+        except Exception as e:
+            raise RuntimeError(f"Vector store unavailable: {e}") from e
+        with st.spinner("🚀 Initializing vector database with 1000 AI/ML jobs..."):
+            vs = VectorStore(model_name="all-MiniLM-L6-v2")
             
-            # Agent input
-            user_query = st.text_area(
-                "Ask the AI agent:",
-                placeholder="e.g., 'Find me senior ML engineering roles at top tech companies with 200K+ salary'"
+            # Create job descriptions for embedding
+            job_texts = []
+            for _, row in _jobs_df.iterrows():
+                text = f"{row['title']} at {row['company']}. "
+                if pd.notna(row.get('description')):
+                    text += str(row['description'])
+                if pd.notna(row.get('requirements')):
+                    text += " " + str(row['requirements'])
+                job_texts.append(text)
+            
+            # Add to vector store
+            vs.add_documents(
+                documents=job_texts,
+                metadatas=_jobs_df.to_dict('records'),
+                ids=[str(i) for i in range(len(_jobs_df))]
             )
             
-            if st.button("🤖 Ask Agent", type="primary"):
-                if user_query:
-                    with st.spinner("Agent reasoning..."):
-                        try:
-                            response = st.session_state.agent.run(user_query, jobs_df)
-                            
-                            st.write("**Agent Response:**")
-                            st.write(response)
-                            
-                            # Show reasoning trace
-                            with st.expander("View Agent Reasoning"):
-                                st.code(st.session_state.agent.get_reasoning_trace(), language="text")
-                        except Exception as e:
-                            st.error(f"Agent error: {str(e)}")
+            return vs
+    
+    @st.cache_resource
+    def initialize_classifier(_jobs_df):
+        """Initialize ATS classifier (lazy import)."""
+        try:
+            ATSClassifier = _get_ats_classifier()
+        except Exception as e:
+            raise RuntimeError(f"ATS classifier unavailable: {e}") from e
+        with st.spinner("🧠 Training ML classifier for ATS prediction..."):
+            classifier = ATSClassifier()
+            
+            # Prepare training data
+            X = _jobs_df[['title', 'company']].apply(
+                lambda x: f"{x['title']} {x['company']}", axis=1
+            ).tolist()
+            
+            # Create synthetic labels (80% would pass ATS for high-quality dataset)
+            np.random.seed(42)
+            y = (np.random.rand(len(X)) > 0.2).astype(int)
+            
+            classifier.train(X, y)
+            return classifier
+    
+    def format_salary(row):
+        """Format salary range"""
+        if pd.notna(row.get('salary_min')) and pd.notna(row.get('salary_max')):
+            return f"${int(row['salary_min']/1000)}K - ${int(row['salary_max']/1000)}K"
+        elif pd.notna(row.get('salary_min')):
+            return f"${int(row['salary_min']/1000)}K+"
+        return "Competitive"
+    
+    def display_job_card(job, score=None, ats_score=None):
+        """Display job as card"""
+        st.markdown(f"""
+        <div class="job-card">
+            <h3>{job['title']}</h3>
+            <p style="color: #666; font-size: 1.1rem;"><strong>{job['company']}</strong> • {job.get('location', 'Remote')}</p>
+            <p><span class="salary-badge">{format_salary(job)}</span></p>
+            {f'<p><span class="score-badge">Match: {score:.1%}</span></p>' if score else ''}
+            {f'<p><span class="score-badge">ATS: {ats_score:.1%}</span></p>' if ats_score else ''}
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Load resume data
+    if st.session_state.resume_loader is None:
+        st.session_state.resume_loader = load_resume()
+    
+    resume_loader = st.session_state.resume_loader
+    
+    # Header
+    st.markdown('<div class="main-header">🤖 AI Agent Job Intelligence - Phase 2</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Personalized Job Matching with Resume MCP Integration</div>', unsafe_allow_html=True)
+    
+    # Display personalized profile if resume loaded
+    if resume_loader:
+        with st.expander("👤 Your Profile (Auto-loaded from Resume MCP)", expanded=False):
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.write(f"**{resume_loader.get_profile_summary()}**")
+                st.write(f"**Top Skills:** {resume_loader.get_skills_text()}")
+                st.write(f"**Target Roles:** {', '.join(resume_loader.get_target_roles())}")
+            with col2:
+                st.write(f"**Salary Preference:** {resume_loader.format_salary_preference()}")
+                contact = resume_loader.get_contact_info()
+                if contact:
+                    st.write(f"**LinkedIn:** {contact.get('linkedin', 'N/A')}")
+    
+    # Load data (friendly error if files missing on Streamlit Cloud)
+    try:
+        if st.session_state.jobs_df is None:
+            st.session_state.jobs_df = load_jobs_data()
+    except FileNotFoundError as e:
+        st.error(f"Data file not found: {e}. Ensure `data/bronze/foorilla_all_jobs.csv` is in the repo.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error loading jobs data: {e}")
+        st.stop()
+    
+    try:
+        jobs_df = st.session_state.jobs_df
+        
+        # Display dataset stats
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Jobs", f"{len(jobs_df):,}")
+        with col2:
+            avg_salary = jobs_df[['salary_min', 'salary_max']].mean().mean()
+            st.metric("Avg Salary", f"${int(avg_salary/1000)}K")
+        with col3:
+            st.metric("Top Companies", jobs_df['company'].nunique())
+        with col4:
+            salary_range = f"${int(jobs_df['salary_min'].min()/1000)}K-${int(jobs_df['salary_max'].max()/1000)}K"
+            st.metric("Salary Range", salary_range)
+        
+        st.markdown("---")
+        
+        # Sidebar
+        st.sidebar.header("🎯 Search Configuration")
+        
+        search_mode = st.sidebar.radio(
+            "Search Mode",
+            ["Vector Search (Semantic)", "ATS Classifier", "AI Agent Orchestration", "Browse All Jobs"]
+        )
+        
+        # Main content based on mode
+        if search_mode == "Vector Search (Semantic)":
+            st.header("🔍 Vector Search - Semantic Job Matching")
+            st.write("Uses sentence-transformers & ChromaDB for semantic similarity")
+            
+            # Initialize vector store (may fail on Streamlit Cloud due to memory)
+            if st.session_state.vector_store is None:
+                try:
+                    st.session_state.vector_store = initialize_vector_store(jobs_df)
+                except Exception as e:
+                    st.error(f"Vector search unavailable: {e}. Try **Browse All Jobs** or **ATS Classifier**.")
+                    st.session_state.vector_store = False
+            if st.session_state.vector_store is False:
+                st.error("Vector search is unavailable (e.g. memory limit). Use **Browse All Jobs** or **ATS Classifier**.")
+                st.stop()
+            
+            # Search input - auto-fill with resume if available
+            default_query = resume_loader.get_resume_text() if resume_loader else ""
+            
+            query = st.text_area(
+                "Enter your resume or skills:",
+                value=default_query,
+                height=150,
+                placeholder="e.g., 'Senior ML Engineer with 5 years experience in Python, PyTorch, building recommendation systems...'"
+            )
+            
+            if resume_loader and not query:
+                st.info("💡 Your resume has been auto-loaded! Click 'Search Jobs' to find matches.")
+            
+            num_results = st.slider("Number of results", 5, 20, 10)
+            
+            if st.button("🚀 Search Jobs", type="primary"):
+                if query:
+                    with st.spinner("Searching with vector embeddings..."):
+                        results = st.session_state.vector_store.semantic_search(query, top_k=num_results)
+                        
+                        # ChromaDB returns: {'ids': [[...]], 'distances': [[...]], 'documents': [[...]], 'metadatas': [[...]]}
+                        num_found = len(results['ids'][0]) if results['ids'] else 0
+                        st.success(f"Found {num_found} matching jobs!")
+                        
+                        if num_found > 0:
+                            for i in range(num_found):
+                                job_id = int(results['ids'][0][i])
+                                distance = results['distances'][0][i]
+                                score = 1 - distance  # Convert distance to similarity score
+                                
+                                # Get job from DataFrame using id
+                                job = jobs_df.iloc[job_id].to_dict()
+                                
+                                with st.expander(f"#{i+1} - {job['title']} @ {job['company']} ({score:.1%} match)"):
+                                    display_job_card(job, score=score)
+                                    
+                                    # Add apply button
+                                    if pd.notna(job.get('apply_url')):
+                                        st.link_button("🚀 Apply Now", job['apply_url'], use_container_width=True)
+                                    
+                                    if pd.notna(job.get('description')):
+                                        st.write("**Description:**")
+                                        st.write(job['description'][:500] + "..." if len(str(job['description'])) > 500 else job['description'])
                 else:
-                    st.warning("Please enter a query for the agent")
-        else:
-            st.warning("Please enter your OpenAI API key to use the AI agent")
+                    st.warning("Please enter your resume or skills to search")
+        
+        elif search_mode == "ATS Classifier":
+            st.header("🎯 ATS Classifier - Machine Learning Prediction")
+            st.write("Uses scikit-learn for ATS compatibility prediction")
+            
+            # Initialize classifier
+            if st.session_state.classifier is None:
+                try:
+                    st.session_state.classifier = initialize_classifier(jobs_df)
+                except Exception as e:
+                    st.error(f"ATS classifier unavailable: {e}")
+                    st.session_state.classifier = False
+            if st.session_state.classifier is False:
+                st.stop()
+            
+            # Input - auto-fill with resume if available
+            default_resume = resume_loader.get_resume_text() if resume_loader else ""
+            
+            resume_text = st.text_area(
+                "Paste your resume:",
+                value=default_resume,
+                height=150,
+                placeholder="Your resume content here..."
+            )
+            
+            if resume_loader and not resume_text:
+                st.info("💡 Your resume has been auto-loaded! Click 'Predict ATS Score' to analyze.")
+            
+            if st.button("🧠 Predict ATS Score", type="primary"):
+                if resume_text:
+                    with st.spinner("Running ML classification..."):
+                        score = st.session_state.classifier.predict_score([resume_text])[0]
+                        
+                        # Show prediction
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("ATS Compatibility Score", f"{score:.1%}")
+                        with col2:
+                            verdict = "✅ PASS" if score > 0.5 else "❌ NEEDS IMPROVEMENT"
+                            st.metric("Verdict", verdict)
+                        
+                        # Show feature importance
+                        importance = st.session_state.classifier.get_feature_importance()
+                        if importance:
+                            st.write("**Top Keywords Importance:**")
+                            # Convert dict to pandas Series for bar chart
+                            importance_series = pd.Series(importance)
+                            st.bar_chart(importance_series)
+                else:
+                    st.warning("Please paste your resume for ATS analysis")
+        
+        elif search_mode == "AI Agent Orchestration":
+            st.header("🤖 AI Agent - Multi-Agent Reasoning System")
+            st.write("Uses LangChain with ReAct framework for autonomous job matching")
+            
+            st.info("💡 Choose provider - DeepSeek is 70x cheaper than GPT-4!")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                provider = st.selectbox(
+                    "LLM Provider:",
+                    ["deepseek", "openai", "together"],
+                    help="DeepSeek: $0.14/$0.28 per 1M tokens | OpenAI: $10/$30 per 1M tokens"
+                )
+            with col2:
+                api_key = st.text_input(
+                    f"{provider.title()} API Key:",
+                    type="password",
+                    help="Get DeepSeek key at: https://platform.deepseek.com"
+                )
+            
+            if api_key:
+                # Initialize agent
+                if st.session_state.agent is None:
+                    with st.spinner("Initializing AI agent..."):
+                        JobMatchingAgent = _get_job_agent()
+                        st.session_state.agent = JobMatchingAgent(api_key=api_key)
+                
+                # Agent input
+                user_query = st.text_area(
+                    "Ask the AI agent:",
+                    placeholder="e.g., 'Find me senior ML engineering roles at top tech companies with 200K+ salary'"
+                )
+                
+                if st.button("🤖 Ask Agent", type="primary"):
+                    if user_query:
+                        with st.spinner("Agent reasoning..."):
+                            try:
+                                response = st.session_state.agent.run(user_query, jobs_df)
+                                
+                                st.write("**Agent Response:**")
+                                st.write(response)
+                                
+                                # Show reasoning trace
+                                with st.expander("View Agent Reasoning"):
+                                    st.code(st.session_state.agent.get_reasoning_trace(), language="text")
+                            except Exception as e:
+                                st.error(f"Agent error: {str(e)}")
+                    else:
+                        st.warning("Please enter a query for the agent")
+            else:
+                st.warning("Please enter your OpenAI API key to use the AI agent")
+        
+        else:  # Browse All Jobs
+            st.header("📋 Browse All Jobs")
+            
+            # Filters
+            col1, col2 = st.columns(2)
+            with col1:
+                companies = ["All"] + sorted(jobs_df['company'].unique().tolist())
+                selected_company = st.selectbox("Filter by Company", companies)
+            with col2:
+                min_salary = st.slider("Minimum Salary (K)", 100, 350, 150)
+            
+            # Apply filters
+            filtered_df = jobs_df.copy()
+            if selected_company != "All":
+                filtered_df = filtered_df[filtered_df['company'] == selected_company]
+            filtered_df = filtered_df[filtered_df['salary_min'] >= (min_salary * 1000)]
+            
+            st.write(f"**Showing {len(filtered_df)} jobs**")
+            
+            # Display jobs
+            for idx, job in filtered_df.head(20).iterrows():
+                with st.expander(f"{job['title']} @ {job['company']}"):
+                    display_job_card(job)
+                    
+                    # Add apply button
+                    if pd.notna(job.get('apply_url')):
+                        st.link_button("🚀 Apply Now", job['apply_url'], use_container_width=True)
+                    
+                    if pd.notna(job.get('description')):
+                        st.write("**Description:**")
+                        st.write(str(job['description'])[:500] + "..." if len(str(job.get('description', ''))) > 500 else job.get('description', ''))
     
-    else:  # Browse All Jobs
-        st.header("📋 Browse All Jobs")
-        
-        # Filters
-        col1, col2 = st.columns(2)
-        with col1:
-            companies = ["All"] + sorted(jobs_df['company'].unique().tolist())
-            selected_company = st.selectbox("Filter by Company", companies)
-        with col2:
-            min_salary = st.slider("Minimum Salary (K)", 100, 350, 150)
-        
-        # Apply filters
-        filtered_df = jobs_df.copy()
-        if selected_company != "All":
-            filtered_df = filtered_df[filtered_df['company'] == selected_company]
-        filtered_df = filtered_df[filtered_df['salary_min'] >= (min_salary * 1000)]
-        
-        st.write(f"**Showing {len(filtered_df)} jobs**")
-        
-        # Display jobs
-        for idx, job in filtered_df.head(20).iterrows():
-            with st.expander(f"{job['title']} @ {job['company']}"):
-                display_job_card(job)
-                
-                # Add apply button
-                if pd.notna(job.get('apply_url')):
-                    st.link_button("🚀 Apply Now", job['apply_url'], use_container_width=True)
-                
-                if pd.notna(job.get('description')):
-                    st.write("**Description:**")
-                    st.write(str(job['description'])[:500] + "..." if len(str(job.get('description', ''))) > 500 else job.get('description', ''))
-
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        st.write("Ensure `data/bronze/foorilla_all_jobs.csv` and `data/bronze/resume.json` exist in the repo.")
+        with st.expander("Details (for debugging)"):
+            st.exception(e)
+    
 except Exception as e:
-    st.error(f"Error loading data: {str(e)}")
-    st.write("Ensure `data/bronze/foorilla_all_jobs.csv` and `data/bronze/resume.json` exist in the repo.")
-    with st.expander("Details (for debugging)"):
+    st.error("App failed to start. See details below.")
+    with st.expander('Full error'):
         st.exception(e)
 
 # Footer

@@ -1,5 +1,6 @@
 """ATS feature store: ML classifier for ATS pass prediction."""
 
+import re
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -140,8 +141,6 @@ class ATSClassifier:
         self.model.fit(X_scaled, y)
 
     def predict_score(self, texts: list) -> np.ndarray:
-        import re
-
         if self.vectorizer is None:
             return np.array([self._calculate_realistic_score(t) for t in texts])
         X_vec = self.vectorizer.transform(texts)

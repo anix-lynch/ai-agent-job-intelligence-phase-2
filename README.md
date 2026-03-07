@@ -29,44 +29,13 @@
 | Target Roles | Not shown | **✅ Displayed & filtered** |
 | Salary Match | Not considered | **✅ Based on your preference** |
 
-## 🚀 Quick Start
+## Run
 
-### 1. Clone Repository
 ```bash
-git clone https://github.com/anix-lynch/ai-agent-job-intelligence-phase-2.git
-cd ai-agent-job-intelligence-phase-2
+pip install -r requirements.txt && streamlit run app.py
 ```
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Add Your Resume
-Place your `resume.json` in the `data/` directory. Format:
-```json
-{
-  "name": "Your Name",
-  "title": "Your Title",
-  "skills": {"Python": 10, "ML": 9, ...},
-  "projects": [...],
-  "experience": [...],
-  "target_roles": ["AI Architect", "ML Engineer"],
-  "target_rate_range": {"min": 70, "max": 200, "currency": "USD", "unit": "hour"}
-}
-```
-
-See [data/resume.json](data/resume.json) for a complete example.
-
-### 4. Run Application
-```bash
-streamlit run app.py
-```
-
-### 5. Test Integration
-```bash
-python test_resume_integration.py
-```
+Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.json) for schema). Deploy via Streamlit Cloud or Vercel.
 
 ## 🎯 Features
 

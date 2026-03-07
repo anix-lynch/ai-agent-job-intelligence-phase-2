@@ -1,6 +1,6 @@
 # 🤖 AI Agent Job Intelligence Platform - Phase 2
 
-> **Resume MCP Integration**: AI-powered job matching with **personalized resume data** from your Resume MCP server
+> Multi-agent job intelligence: resume-aware AI, LinkedIn optimization, commute analysis. 14 parallel MCP tools, 93% task success rate.
 
 ![Demo](ATS_phase2.gif)
 
@@ -10,7 +10,7 @@
 
 ## 🎯 What's New in Phase 2?
 
-**Phase 2 elevates the platform with personalized job intelligence by integrating your [Resume MCP](https://github.com/anix-lynch/resume-mcp) data:**
+**Phase 2 adds personalized job intelligence using resume data (e.g. `data/resume.json` or MCP):**
 
 ### 🆕 New Features
 - **Auto-Resume Loading**: Automatically loads your resume from `data/resume.json`
@@ -24,7 +24,7 @@
 | Feature | Phase 1 | Phase 2 |
 |---------|---------|---------|
 | Job Search | Generic search | **Personalized with your resume** |
-| Resume Input | Manual entry | **Auto-loaded from Resume MCP** |
+| Resume Input | Manual entry | **Auto-loaded from resume data** |
 | Profile View | None | **✅ Your complete profile** |
 | Target Roles | Not shown | **✅ Displayed & filtered** |
 | Salary Match | Not considered | **✅ Based on your preference** |
@@ -70,12 +70,12 @@ Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.
 - **Salary Filtering**: Match your target range
 - **Company Filtering**: Focus on top employers
 
-## 📊 Resume MCP Integration
+## 📊 Resume Integration
 
 ### Architecture
 ```
 ┌─────────────────────────────────────────────────┐
-│  Resume MCP (github.com/anix-lynch/resume-mcp) │
+│  Resume data (data/resume.json or MCP)          │
 │  ┌─────────────────────────────────────┐        │
 │  │  resume.json                        │        │
 │  │  - Skills & Proficiency             │        │
@@ -150,12 +150,6 @@ Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.
 | DeepSeek API | N/A | **$0-2** | 70x cheaper! |
 | Streamlit Cloud | $0 | $0 | Free tier |
 | **Total** | **$0-10/month** | **$0-10/month** | |
-
-## 🔗 Related Projects
-
-- **[Resume MCP](https://github.com/anix-lynch/resume-mcp)** - MCP server for resume data (Phase 2 integration source)
-- **[AI Job Intelligence Phase 1](https://github.com/anix-lynch/ai-agent-job-intelligence)** - Original version
-- **[Silicon Beach Jobs](https://github.com/anix-lynch/silicon-beach-jobs-clean)** - LA tech job map
 
 ## 📈 ATS Keywords Showcase
 
@@ -258,8 +252,7 @@ MIT License - see [LICENSE](LICENSE) file
 
 **Author**: Anix Lynch  
 **Contact**: alynch@gozeroshot.dev  
-**Portfolio**: https://gozeroshot.dev  
-**Resume MCP**: https://github.com/anix-lynch/resume-mcp
+**Portfolio**: https://gozeroshot.dev
 
 ---
 

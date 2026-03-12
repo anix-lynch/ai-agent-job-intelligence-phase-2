@@ -119,20 +119,28 @@ try:
     
     @st.cache_resource
     def load_resume():
-        """Load personalized resume from Resume MCP"""
+        """Load personalized resume from data/bronze/resume.json. No st.* inside cache."""
         try:
             ResumeLoader = _get_resume_loader()
             return ResumeLoader()
-        except Exception as e:
-            st.error(f"Error loading resume: {str(e)}")
+        except Exception:
             return None
-    
+
+    def _fallback_jobs_df():
+        """Minimal job rows so app loads on Streamlit Cloud when CSV is missing."""
+        return pd.DataFrame([
+            {"company": "Acme AI", "title": "Senior ML Engineer", "location": "Remote", "salary_min": 180000, "salary_max": 240000, "apply_url": "https://example.com", "description": ""},
+            {"company": "DataCo", "title": "Data Engineer", "location": "San Francisco, CA", "salary_min": 150000, "salary_max": 200000, "apply_url": "https://example.com", "description": ""},
+            {"company": "TechCorp", "title": "AI Research Scientist", "location": "New York, NY", "salary_min": 200000, "salary_max": 280000, "apply_url": "https://example.com", "description": ""},
+        ])
+
     @st.cache_data
     def load_jobs_data():
-        """Load Foorilla jobs dataset (bronze layer)"""
+        """Load Foorilla jobs dataset (bronze layer), or fallback sample if file missing."""
         data_path = Path(__file__).parent / "data" / "bronze" / "foorilla_all_jobs.csv"
-        df = pd.read_csv(data_path)
-        return df
+        if data_path.exists():
+            return pd.read_csv(data_path)
+        return _fallback_jobs_df()
     
     @st.cache_resource
     def initialize_vector_store(_jobs_df):
@@ -229,31 +237,31 @@ try:
                 if contact:
                     st.write(f"**LinkedIn:** {contact.get('linkedin', 'N/A')}")
     
-    # Load data (friendly error if files missing on Streamlit Cloud)
+    # Load jobs (uses fallback sample if CSV missing on Streamlit Cloud)
+    if st.session_state.jobs_df is None:
+        st.session_state.jobs_df = load_jobs_data()
+
+    jobs_df = st.session_state.jobs_df
+    data_path = Path(__file__).parent / "data" / "bronze" / "foorilla_all_jobs.csv"
+    if not data_path.exists():
+        st.info("Using sample job data. Add `data/bronze/foorilla_all_jobs.csv` to the repo for the full dataset.")
+
+    if not resume_loader:
+        st.sidebar.caption("Resume (data/bronze/resume.json) not found — profile features disabled.")
+
     try:
-        if st.session_state.jobs_df is None:
-            st.session_state.jobs_df = load_jobs_data()
-    except FileNotFoundError as e:
-        st.error(f"Data file not found: {e}. Ensure `data/bronze/foorilla_all_jobs.csv` is in the repo.")
-        st.stop()
-    except Exception as e:
-        st.error(f"Error loading jobs data: {e}")
-        st.stop()
-    
-    try:
-        jobs_df = st.session_state.jobs_df
-        
         # Display dataset stats
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Jobs", f"{len(jobs_df):,}")
         with col2:
-            avg_salary = jobs_df[['salary_min', 'salary_max']].mean().mean()
-            st.metric("Avg Salary", f"${int(avg_salary/1000)}K")
+            avg_salary = jobs_df[['salary_min', 'salary_max']].replace(0, np.nan).mean().mean()
+            st.metric("Avg Salary", f"${int(avg_salary/1000)}K" if pd.notna(avg_salary) else "—")
         with col3:
             st.metric("Top Companies", jobs_df['company'].nunique())
         with col4:
-            salary_range = f"${int(jobs_df['salary_min'].min()/1000)}K-${int(jobs_df['salary_max'].max()/1000)}K"
+            smin, smax = jobs_df['salary_min'].min(), jobs_df['salary_max'].max()
+            salary_range = f"${int(smin/1000)}K-${int(smax/1000)}K" if pd.notna(smin) and pd.notna(smax) and smin and smax else "—"
             st.metric("Salary Range", salary_range)
         
         st.markdown("---")
@@ -445,7 +453,7 @@ try:
             filtered_df = jobs_df.copy()
             if selected_company != "All":
                 filtered_df = filtered_df[filtered_df['company'] == selected_company]
-            filtered_df = filtered_df[filtered_df['salary_min'] >= (min_salary * 1000)]
+            filtered_df = filtered_df[filtered_df['salary_min'].fillna(0) >= (min_salary * 1000)]
             
             st.write(f"**Showing {len(filtered_df)} jobs**")
             

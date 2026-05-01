@@ -8,6 +8,98 @@
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+---
+
+## Repository structure
+
+```
+ai-agent-job-intelligence-phase-2/
+├── agents/
+│   ├── orchestrator/
+│   │   ├── __init__.py
+│   │   └── agent.py
+│   ├── prompts/
+│   │   └── .gitkeep
+│   ├── tools/
+│   │   └── .gitkeep
+│   └── langchain_agent.py
+├── api/
+│   ├── routes/
+│   │   └── .gitkeep
+│   ├── schemas/
+│   │   └── .gitkeep
+│   └── __init__.py
+├── app/
+│   ├── streamlit/
+│   │   └── .gitkeep
+│   └── __init__.py
+├── data/
+│   ├── bronze/
+│   │   ├── .gitkeep
+│   │   ├── foorilla_all_jobs.csv
+│   │   └── resume.json
+│   ├── gold/
+│   │   └── .gitkeep
+│   └── silver/
+│       └── .gitkeep
+├── docs/
+│   ├── CHANGELOG.md
+│   ├── DEPLOYMENT.md
+│   ├── DEPLOYMENT_COST_COMPARISON.md
+│   ├── FLY_IO_DEPLOYMENT_GUIDE.md
+│   ├── INTEGRATION_GUIDE.md
+│   ├── PHASE2_SUMMARY.md
+│   ├── PROJECT_SPEC.md
+│   └── STREAMLIT_DEPLOYMENT.md
+├── features/
+│   ├── feature_store/
+│   │   ├── __init__.py
+│   │   └── ats.py
+│   ├── vector_store/
+│   │   ├── __init__.py
+│   │   └── store.py
+│   └── __init__.py
+├── mcp/
+│   ├── auth_middleware.py
+│   ├── match_rank.py
+│   ├── openapi_chatgpt.yaml
+│   ├── openapi_simple.yaml
+│   ├── rulebook.yaml
+│   ├── server_http.py
+│   └── server_simple.py
+├── ml/
+│   ├── classifier.py
+│   └── vector_store.py
+├── pipelines/
+│   ├── ingestion/
+│   │   ├── __init__.py
+│   │   └── resume_loader.py
+│   └── __init__.py
+├── shared/
+│   ├── __init__.py
+│   └── get_secret.py
+├── utils/
+│   ├── __pycache__/
+│   │   ├── __init__.cpython-314.pyc
+│   │   └── resume_loader.cpython-314.pyc
+│   ├── __init__.py
+│   ├── get_secret.py
+│   └── resume_loader.py
+├── .dockerignore
+├── .gitignore
+├── app.py
+├── ARCHITECTURE.md
+├── ATS_phase2.gif
+├── docker-compose.yml
+├── Dockerfile
+├── fly.toml
+├── README.md
+├── requirements-fly.txt
+├── requirements.txt
+├── runtime.txt
+└── test_resume_integration.py
+```
+
 ## 🎯 What's New in Phase 2?
 
 **Phase 2 adds personalized job intelligence using resume data (e.g. `data/resume.json` or MCP):**

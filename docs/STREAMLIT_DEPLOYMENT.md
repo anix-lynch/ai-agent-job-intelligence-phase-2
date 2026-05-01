@@ -1,4 +1,4 @@
-# 🚀 Streamlit Cloud Deployment - AI Job Intelligence Phase 2
+#  Streamlit Cloud Deployment - AI Job Intelligence Phase 2
 
 **Deployment Status:** Ready to deploy  
 **Repository:** `anix-lynch/ai-agent-job-intelligence-phase-2`  
@@ -38,7 +38,7 @@
 
 ---
 
-## 🎯 Deployment Steps
+##  Deployment Steps
 
 ### Method 1: Via Streamlit Cloud Dashboard (Recommended)
 
@@ -150,7 +150,7 @@ api_key = st.secrets["OPENAI_API_KEY"]
 
 ---
 
-## 📊 Expected Build Output
+##  Expected Build Output
 
 ### Build Process (3-5 minutes)
 
@@ -314,11 +314,11 @@ git push origin main
 3. Redeploys
 4. Live in 2-3 minutes
 
-**No manual deployment needed!** ✨
+**No manual deployment needed!** 
 
 ---
 
-## 💰 Cost & Limits
+##  Cost & Limits
 
 ### Free Tier (Community)
 
@@ -335,7 +335,7 @@ git push origin main
 
 ---
 
-## 🎯 Distro Dojo Compliance
+##  Distro Dojo Compliance
 
 ### 4-Platform Strategy Status
 

@@ -376,9 +376,9 @@ else:
 1. ✅ Verify integration with test script
 2. ✅ Customize your resume.json
 3. ✅ Run the application
-4. 🚀 Deploy to Streamlit Cloud
-5. 📊 Monitor job matches
-6. 🎯 Refine your profile based on results
+4.  Deploy to Streamlit Cloud
+5.  Monitor job matches
+6.  Refine your profile based on results
 
 ## Support
 

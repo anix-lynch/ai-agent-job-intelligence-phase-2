@@ -1,4 +1,4 @@
-# 🚀 Fly.io Deployment Best Practices Guide
+#  Fly.io Deployment Best Practices Guide
 
 Complete guide for deploying Streamlit/Python apps to Fly.io with authentication, optimization, and troubleshooting.
 
@@ -513,7 +513,7 @@ fly machines stop <machine-id>          # Stop machine
 
 set -e  # Exit on error
 
-echo "🚀 Starting Fly.io deployment..."
+echo " Starting Fly.io deployment..."
 
 # 1. Set credentials
 export FLY_ACCESS_TOKEN="FlyV1 your_token_here"

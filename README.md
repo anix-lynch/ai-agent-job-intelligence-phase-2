@@ -1,4 +1,4 @@
-# 🤖 AI Agent Job Intelligence Platform - Phase 2
+#  AI Agent Job Intelligence Platform - Phase 2
 
 > Multi-agent job intelligence: resume-aware AI, LinkedIn optimization, commute analysis. 14 parallel MCP tools, 93% task success rate.
 
@@ -100,7 +100,7 @@ ai-agent-job-intelligence-phase-2/
 └── test_resume_integration.py
 ```
 
-## 🎯 What's New in Phase 2?
+##  What's New in Phase 2?
 
 **Phase 2 adds personalized job intelligence using resume data (e.g. `data/resume.json` or MCP):**
 
@@ -111,7 +111,7 @@ ai-agent-job-intelligence-phase-2/
 - **Profile Dashboard**: See your skills, target roles, and salary preferences at a glance
 - **One-Click Job Search**: No more copy-pasting - your resume is ready to go!
 
-### 📊 Phase 1 vs Phase 2
+###  Phase 1 vs Phase 2
 
 | Feature | Phase 1 | Phase 2 |
 |---------|---------|---------|
@@ -129,7 +129,7 @@ pip install -r requirements.txt && streamlit run app.py
 
 Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.json) for schema). Deploy via Streamlit Cloud or Vercel.
 
-## 🎯 Features
+##  Features
 
 ### 1. 🔍 Vector Search (Semantic)
 - **Auto-Filled Resume**: Your resume loads automatically
@@ -137,13 +137,13 @@ Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.
 - **ChromaDB**: Vector database for fast similarity search
 - **Cosine Similarity**: Find jobs matching your actual skills, not just keywords
 
-### 2. 🎯 ATS Classifier
+### 2.  ATS Classifier
 - **Pre-Loaded Resume**: Your resume is ready for analysis
 - **ML Classification**: scikit-learn predicts ATS pass rate
 - **Feature Importance**: See which keywords matter most
 - **96%+ Accuracy**: Trained on real job posting data
 
-### 3. 🤖 AI Agent Orchestration
+### 3.  AI Agent Orchestration
 - **Multi-Agent System**: LangChain with ReAct framework
 - **Autonomous Reasoning**: Agent analyzes jobs and makes recommendations
 - **DeepSeek Support**: 70x cheaper than GPT-4 ($0.14/$0.28 per 1M tokens)
@@ -162,7 +162,7 @@ Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.
 - **Salary Filtering**: Match your target range
 - **Company Filtering**: Focus on top employers
 
-## 📊 Resume Integration
+##  Resume Integration
 
 ### Architecture
 ```
@@ -232,7 +232,7 @@ Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.
 - **Profile Integration**: Auto-fill forms
 - **Personalization Layer**: Custom matching logic
 
-## 💰 Cost Breakdown
+##  Cost Breakdown
 
 | Service | Phase 1 | Phase 2 | Notes |
 |---------|---------|---------|-------|
@@ -247,7 +247,7 @@ Resume data: place `resume.json` in `data/` (see [data/resume.json](data/resume.
 
 This project demonstrates these high-value skills:
 
-### 🤖 LLM & AI ($180K+)
+###  LLM & AI ($180K+)
 - Retrieval Augmented Generation (RAG)
 - Prompt Engineering
 - Transformer Models
@@ -277,7 +277,7 @@ Want to build something similar? Key concepts:
 4. **ReAct Framework**: Reasoning + Action for agents
 5. **MCP Protocol**: Model Context Protocol for data access
 
-## 🚀 Deployment
+##  Deployment
 
 ### Streamlit Cloud (Recommended)
 ```bash
